@@ -11,6 +11,11 @@ import requests
 import time
 import re
 import json
+import pymongo
+
+client = pymongo.MongoClient('mongodb://localhost:27017')
+db = client['tripadvisor']
+collection = db['restaurants']
 
 domain = 'https://www.tripadvisor.com'
 ua = UserAgent()
@@ -20,7 +25,7 @@ df = pd.read_csv('./data/url_parser.csv')
 total_restaurants = len(df)
 debug = True
 if debug:
-    limit = 2
+    limit = 10
 else:
     limit = None
 
@@ -47,6 +52,7 @@ for index, u in enumerate(df['url'][:limit]):
     }).get('data-page-number')
     page_down = "window.scrollTo(0, document.body.scrollHeight);var lenOfPage=document.body.scrollHeight;return lenOfPage;"
     page_list = range(int(last_page))
+    read_more = '//div[@class="prw_rup prw_reviews_text_summary_hsx"]/div/p/span[@class="taLnk ulBlueLinks"]'
 
     actions = ActionChains(driver)
 
@@ -58,6 +64,10 @@ for index, u in enumerate(df['url'][:limit]):
                                                   p + 1, last_page))
 
         review_blocks = soup.find_all('div', {"class": "reviewSelector"})
+
+        more_button = driver.find_element_by_xpath(read_more)
+        actions.move_to_element(more_button).click()
+
         for element in review_blocks:
             id += 1
             name = element.find('div', {"class": "info_text"}).find('div').text
@@ -66,9 +76,10 @@ for index, u in enumerate(df['url'][:limit]):
             rating = int(re.sub('[^0-9,]', "", rating).replace(',', '')) / 10
             date = element.find('span', {"class": "ratingDate"}).get('title')
             title = element.find('span', {"class": "noQuotes"}).text
+
             detail = element.find('p', {"class": "partial_entry"}).text
             review['reviews'].append({
-                'index': int(id),
+                # 'index': int(id),
                 'name': name,
                 'rating': rating,
                 'date': date,
@@ -86,12 +97,14 @@ for index, u in enumerate(df['url'][:limit]):
             print(e)
 
     data['restaurants'].append({
-        'id': int(restaurant_id),
+        # 'id': int(restaurant_id),
         'name': restaurant_name,
         'reviews': review['reviews']
     })
 
 with open('data/content_parser.json', 'a') as outfile:
     json.dump(data, outfile)
+
+# result = collection.insert_many(data['restaurants'])
 
 driver.quit()
